@@ -1,0 +1,8 @@
+# 临时文件
+__pycache__/
+*.pyc
+*.pyo
+.trae-html-share-packages/
+剪映字幕数据结构分析.md
+node_modules/
+.DS_Store
