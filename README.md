@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **这是一个个人修改分支，不是原作者官方仓库。**
+> 感谢原作者 [852wa/JIZURA](https://github.com/852wa/JIZURA)（MIT License）。本分支保留了原版全部功能，并新增了 AI 歌词识别 / 人声分离 / 在线搜词 / 自动对齐、中文汉化、镜头大字编辑、内容锁定等功能。
+> 详见 **[README-FORK.md](README-FORK.md)**（含功能清单、使用方式与致谢）。原版请见 <https://github.com/852wa/JIZURA>。
+
+---
+
 # JIZURA 字面 — 文字PV自動構成ツール
 
 **English edition:** [Open the app](https://852wa.github.io/JIZURA/en/) · [English guide](README.en.md)　／　**Bahasa Indonesia**：[Buka](https://852wa.github.io/JIZURA/id/) · [Panduan](README.id.md)　**Tiếng Việt**：[Mở](https://852wa.github.io/JIZURA/vi/) · [Hướng dẫn](README.vi.md)　**繁體中文**：[開啟](https://852wa.github.io/JIZURA/zh-hant/)　**简体中文**：[打开](https://852wa.github.io/JIZURA/zh-hans/)　**한국어**：[열기](https://852wa.github.io/JIZURA/ko/) · [한국어 가이드](README.ko.md)
