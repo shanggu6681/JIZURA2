@@ -695,6 +695,8 @@ function renderLines() {
         <button type="button" class="icon-txt ghost cut-add sp-add" title="カット（時間ブロック）を増やす">＋</button>
         ${opts.readFirst ? '<button type="button" class="icon-txt ghost st-read" title="最初の歌詞の開始時刻を読む">⏎ 初行</button>' : ''}
         ${opts.readLast ? '<button type="button" class="icon-txt ghost st-readlast" title="音声の最後の時刻を読む">⏎ 末尾</button>' : ''}
+        ${opts.linkPrev ? '<button type="button" class="icon-txt ghost st-linkprev" title="前の歌詞の終わりに開始を合わせる">⏎ 前句に合わせ</button>' : ''}
+        ${opts.linkTail ? '<button type="button" class="icon-txt ghost st-linktail" title="尾音の終わりに開始を合わせる">⏎ 尾音に合わせ</button>' : ''}
       </span></div>
       <span class="sp-note-detail">${opts.note || ''}</span>`;
     const q = sel => li.querySelector(sel);
@@ -768,6 +770,27 @@ function renderLines() {
       setSpecial(key, { start: +Math.max(0, dur - 6).toFixed(3), end: +dur.toFixed(3) });
       toast(`${name}: ${dur.toFixed(2)} 秒を読み込みました`);
       seek(Math.max(0, dur - 1.2));
+    });
+    // 開始时刻を直前の区間の終わりに自動で合わせる ( Tail = 最後の歌詞 / ED = 尾音 )
+    const linkToPrev = opts.linkPrev || opts.linkTail;
+    if (linkToPrev) (opts.linkPrev ? q('.st-linkprev') : q('.st-linktail')).addEventListener('click', () => {
+      let anchor = 0;
+      if (opts.linkPrev) {
+        // 最後の歌詞行の visEnd (最後のカットが実際に終わる時刻)
+        const L = S.plan.lines.filter(x => !x.interlude);
+        anchor = L.length ? +L[L.length - 1].visEnd : 0;
+      } else {
+        const t = (S.project.specials || {}).tail || {};
+        anchor = Math.max(0, +t.end || 0);
+      }
+      anchor = +anchor.toFixed(3);
+      const oldEnd = Math.max(0, +sp.end || 0);
+      // 開始を動かした結果モジュールが消えないよう、末尾が開始を超えていなければ少し延ばす。
+      // plan.duration は歌詞尺なので、尾音/ED の末尾はそれを超えてもよい (シーク可能)。
+      const newEnd = oldEnd > anchor + 0.04 ? oldEnd : +(anchor + 6).toFixed(3);
+      setSpecial(key, { start: anchor, end: newEnd });
+      toast(`${name}: ${anchor.toFixed(2)} 秒に合わせました`);
+      seek(Math.max(0, anchor + 0.05));
     });
     ol.appendChild(li); return li;
   };
@@ -866,8 +889,8 @@ function renderLines() {
     });
     ol.appendChild(li); S.lineEls.push(li);
   });
-  addSpecialRow('tail', '尾', '尾音（余韻・静止）', { readLast: true, note: '時間 0 = 無効・入場アニメ後に静止' });
-  addSpecialRow('outro', 'ED', 'エンディング（片尾）', { readLast: true, note: '時間 0 = 無効・歌詞の後' });
+  addSpecialRow('tail', '尾', '尾音（余韻・静止）', { readLast: true, linkPrev: true, note: '時間 0 = 無効・入場アニメ後に静止' });
+  addSpecialRow('outro', 'ED', 'エンディング（片尾）', { readLast: true, linkTail: true, note: '時間 0 = 無効・歌詞の後' });
   $('linesInfo').textContent = `${S.plan.lines.length}行 / ${S.plan.cuts.length}カット`;
   syncRangeUI();
 }

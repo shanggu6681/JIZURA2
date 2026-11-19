@@ -8,11 +8,19 @@ const E = J.E;
 const mk = (w, h) => { const c = document.createElement('canvas'); c.width = Math.max(1, w | 0); c.height = Math.max(1, h | 0); return c; };
 
 J.cutAt = (plan, t) => {
-  const cs = plan.cuts; let lo = 0, hi = cs.length - 1, ans = -1;
-  while (lo <= hi) { const m = (lo + hi) >> 1; if (cs[m].start <= t) { ans = m; lo = m + 1; } else hi = m - 1; }
-  if (ans < 0) return null;
-  const c = cs[ans];
-  return t < c.end ? c : null;
+  // Special module cuts (intro/tail/outro) are placed at user-set times and can overlap lyric cuts.
+  // A plain binary search assumes non-overlapping, back-to-back cuts and then misses the tail cut
+  // (e.g. lyric 12–13.8, tail 10.5–18 → at t=15 it returned null). Walk the sorted cuts instead and
+  // prefer a special cut whenever several cover the playhead, so the technique panel edits the right cut.
+  const cs = plan.cuts;
+  let best = null;
+  for (let i = 0; i < cs.length; i++) {
+    const c = cs[i];
+    if (t < c.start) break;                    // sorted by start: nothing later can cover t
+    if (t >= c.end) continue;
+    if (!best || (c.special != null && best.special == null)) best = c;
+  }
+  return best;
 };
 // 尾音 (freeze cut): after its entrance animation ends the frame holds perfectly still —
 // background, camera, text, effects and grain all evaluate at the same frozen time.

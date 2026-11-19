@@ -4941,11 +4941,19 @@ const E = J.E;
 const mk = (w, h) => { const c = document.createElement('canvas'); c.width = Math.max(1, w | 0); c.height = Math.max(1, h | 0); return c; };
 
 J.cutAt = (plan, t) => {
-  const cs = plan.cuts; let lo = 0, hi = cs.length - 1, ans = -1;
-  while (lo <= hi) { const m = (lo + hi) >> 1; if (cs[m].start <= t) { ans = m; lo = m + 1; } else hi = m - 1; }
-  if (ans < 0) return null;
-  const c = cs[ans];
-  return t < c.end ? c : null;
+  // Special module cuts (intro/tail/outro) are placed at user-set times and can overlap lyric cuts.
+  // A plain binary search assumes non-overlapping, back-to-back cuts and then misses the tail cut
+  // (e.g. lyric 12–13.8, tail 10.5–18 → at t=15 it returned null). Walk the sorted cuts instead and
+  // prefer a special cut whenever several cover the playhead, so the technique panel edits the right cut.
+  const cs = plan.cuts;
+  let best = null;
+  for (let i = 0; i < cs.length; i++) {
+    const c = cs[i];
+    if (t < c.start) break;                    // sorted by start: nothing later can cover t
+    if (t >= c.end) continue;
+    if (!best || (c.special != null && best.special == null)) best = c;
+  }
+  return best;
 };
 // 尾音 (freeze cut): after its entrance animation ends the frame holds perfectly still —
 // background, camera, text, effects and grain all evaluate at the same frozen time.
@@ -59653,6 +59661,8 @@ function renderLines() {
         <button type="button" class="icon-txt ghost cut-add sp-add" title="Thêm cut (khối thời gian)">＋</button>
         ${opts.readFirst ? '<button type="button" class="icon-txt ghost st-read" title="Đọc thời điểm bắt đầu của dòng lời đầu tiên">⏎ Dòng 1</button>' : ''}
         ${opts.readLast ? '<button type="button" class="icon-txt ghost st-readlast" title="Đọc thời điểm kết thúc âm thanh">⏎ Cuối</button>' : ''}
+        ${opts.linkPrev ? '<button type="button" class="icon-txt ghost st-linkprev" title="Căn bắt đầu vào cuối câu hát trước">⏎ Căn câu trước</button>' : ''}
+        ${opts.linkTail ? '<button type="button" class="icon-txt ghost st-linktail" title="Căn bắt đầu vào cuối đoạn âm đuôi">⏎ Căn đoạn âm đuôi</button>' : ''}
       </span></div>
       <span class="sp-note-detail">${opts.note || ''}</span>`;
     const q = sel => li.querySelector(sel);
@@ -59726,6 +59736,27 @@ function renderLines() {
       setSpecial(key, { start: +Math.max(0, dur - 6).toFixed(3), end: +dur.toFixed(3) });
       toast(`${name}: ${dur.toFixed(2)}  giây đã đọc`);
       seek(Math.max(0, dur - 1.2));
+    });
+    // 開始时刻を直前の区間の終わりにTự độngで合わせる ( Tail = 最後の歌詞 / ED = 尾音 )
+    const linkToPrev = opts.linkPrev || opts.linkTail;
+    if (linkToPrev) (opts.linkPrev ? q('.st-linkprev') : q('.st-linktail')).addEventListener('click', () => {
+      let anchor = 0;
+      if (opts.linkPrev) {
+        // 最後の歌詞dòngの visEnd (最後のcảnhが実際に終わる時刻)
+        const L = S.plan.lines.filter(x => !x.interlude);
+        anchor = L.length ? +L[L.length - 1].visEnd : 0;
+      } else {
+        const t = (S.project.specials || {}).tail || {};
+        anchor = Math.max(0, +t.end || 0);
+      }
+      anchor = +anchor.toFixed(3);
+      const oldEnd = Math.max(0, +sp.end || 0);
+      // 開始を動かした結果モジュールが消えないよう、末尾が開始を超えていなければ少し延ばす。
+      // plan.duration は歌詞尺なので、尾音/ED の末尾はそれを超えてもよい (シーク可能)。
+      const newEnd = oldEnd > anchor + 0.04 ? oldEnd : +(anchor + 6).toFixed(3);
+      setSpecial(key, { start: anchor, end: newEnd });
+      toast(`${name}: ${anchor.toFixed(2)} giây đã căn`);
+      seek(Math.max(0, anchor + 0.05));
     });
     ol.appendChild(li); return li;
   };
@@ -59824,8 +59855,8 @@ function renderLines() {
     });
     ol.appendChild(li); S.lineEls.push(li);
   });
-  addSpecialRow('tail', '尾', 'Đuôi (du âm / đứng yên)', { readLast: true, note: 'thời gian 0 = tắt, đứng yên sau hoạt ảnh vào' });
-  addSpecialRow('outro', 'ED', 'Kết thúc', { readLast: true, note: 'thời gian 0 = tắt, sau lời bài hát' });
+  addSpecialRow('tail', '尾', 'Đuôi (du âm / đứng yên)', { readLast: true, linkPrev: true, note: 'thời gian 0 = tắt, đứng yên sau hoạt ảnh vào' });
+  addSpecialRow('outro', 'ED', 'Kết thúc', { readLast: true, linkTail: true, note: 'thời gian 0 = tắt, sau lời bài hát' });
   $('linesInfo').textContent = `${S.plan.lines.length} câu /${S.plan.cuts.length} cảnh`;
   syncRangeUI();
 }
