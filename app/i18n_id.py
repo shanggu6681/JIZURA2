@@ -380,6 +380,8 @@ UI = {
     '時間 0 = 無効・最初の歌詞の前': 'waktu 0 = nonaktif, sebelum lirik pertama',
     '時間 0 = 無効・入場アニメ後に静止': 'waktu 0 = nonaktif, diam setelah animasi masuk',
     '時間 0 = 無効・歌詞の後': 'waktu 0 = nonaktif, setelah lirik',
+    '音声の最後の時刻を読む': 'Baca waktu akhir audio',
+    '⏎ 末尾': '⏎ Akhir',
     '最初の歌詞の開始時刻を読む': 'Baca waktu mulai lirik pertama',
     '間奏カウントダウン': 'Hitung mundur interlude',
     'テンプレートはそのまま、残り秒数を重ねます': 'Templat tetap, sisa detik ditampilkan',

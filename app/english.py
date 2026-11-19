@@ -348,6 +348,8 @@ UI = {
     '時間 0 = 無効・最初の歌詞の前': 'time 0 = off; before the first lyric line',
     '時間 0 = 無効・入場アニメ後に静止': 'time 0 = off; freezes after the entrance animation',
     '時間 0 = 無効・歌詞の後': 'time 0 = off; after the lyrics',
+    '音声の最後の時刻を読む': 'Read the audio end time',
+    '⏎ 末尾': '⏎ End',
     '最初の歌詞の開始時刻を読む': 'Read the first lyric line start time',
     '間奏カウントダウン': 'Interlude countdown',
     'テンプレートはそのまま、残り秒数を重ねます': 'Keep the template, overlay the remaining seconds',

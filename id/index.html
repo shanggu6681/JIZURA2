@@ -59652,6 +59652,7 @@ function renderLines() {
         </span>
         <button type="button" class="icon-txt ghost cut-add sp-add" title="Tambah cut (blok waktu)">＋</button>
         ${opts.readFirst ? '<button type="button" class="icon-txt ghost st-read" title="Baca waktu mulai lirik pertama">⏎ Baris 1</button>' : ''}
+        ${opts.readLast ? '<button type="button" class="icon-txt ghost st-readlast" title="Baca waktu akhir audio">⏎ Akhir</button>' : ''}
       </span></div>
       <span class="sp-note-detail">${opts.note || ''}</span>`;
     const q = sel => li.querySelector(sel);
@@ -59667,7 +59668,9 @@ function renderLines() {
     q('.sp-add').addEventListener('click', () => addCut(line));
     // 各cutのLayoutセレクト（通常baris と同じく、Putar位置で手法パネルが開く）
     const cutsEl = q('.sp-cuts');
-    const spCuts = S.plan.cuts.filter(c => c.line === line && J.LAYOUTS[c.layout] && !J.LAYOUTS[c.layout].special);
+    // special Layout (title/interlude) も選べるよう、special を除外せず全cutを出す。
+    // これで ED (既定 interlude) や OP (既定 title) にも「吊挂」等のLayout選択が現れる。
+    const spCuts = S.plan.cuts.filter(c => c.line === line && J.LAYOUTS[c.layout]);
     spCuts.forEach((c, k) => {
       const tech = cutTechSlot(line, k);
       const forced = tech.layout || sOv.cutLayouts && sOv.cutLayouts[k];
@@ -59702,11 +59705,27 @@ function renderLines() {
         pair.append(tIn, sel, del); cutsEl.appendChild(pair);
       } else cutsEl.appendChild(sel);
     });
+    // cutが無い (時間 0) 時もLayout選択を常駐させる。镜头下拉と互斥なので重複しない。
+    if (!spCuts.length) {
+      const sel = document.createElement('select');
+      sel.className = 'lay pro-only cut-lay st-lay';
+      sel.setAttribute('aria-label', `${name} Layout`);
+      lazyLay(sel, sp.layout || '');
+      sel.addEventListener('change', e => setSpecial(key, { layout: e.target.value || undefined }));
+      cutsEl.appendChild(sel);
+    }
     if (opts.readFirst) q('.st-read').addEventListener('click', () => {
       const t = S.plan.lines.length ? S.plan.lines[0].start : 0;
       setSpecial(key, { end: +t.toFixed(3), start: 0 });
       toast(`${name}: ${t.toFixed(2)}  detik dibaca`);
       seek(0.001);
+    });
+    if (opts.readLast) q('.st-readlast').addEventListener('click', () => {
+      // 音声の長さを末尾時刻として読む (未読込時は歌詞全体の尺を使う)
+      const dur = S.audio && isFinite(S.audio.duration) ? S.audio.duration : (S.plan.duration || 0);
+      setSpecial(key, { start: +Math.max(0, dur - 6).toFixed(3), end: +dur.toFixed(3) });
+      toast(`${name}: ${dur.toFixed(2)}  detik dibaca`);
+      seek(Math.max(0, dur - 1.2));
     });
     ol.appendChild(li); return li;
   };
@@ -59805,8 +59824,8 @@ function renderLines() {
     });
     ol.appendChild(li); S.lineEls.push(li);
   });
-  addSpecialRow('tail', '尾', 'EkOR (ekor / diam)', { note: 'waktu 0 = nonaktif, diam setelah animasi masuk' });
-  addSpecialRow('outro', 'ED', 'Penutup', { note: 'waktu 0 = nonaktif, setelah lirik' });
+  addSpecialRow('tail', '尾', 'EkOR (ekor / diam)', { readLast: true, note: 'waktu 0 = nonaktif, diam setelah animasi masuk' });
+  addSpecialRow('outro', 'ED', 'Penutup', { readLast: true, note: 'waktu 0 = nonaktif, setelah lirik' });
   $('linesInfo').textContent = `${S.plan.lines.length} baris / ${S.plan.cuts.length} cut`;
   syncRangeUI();
 }

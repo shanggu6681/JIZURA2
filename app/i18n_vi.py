@@ -481,6 +481,8 @@ UI = {
     '時間 0 = 無効・最初の歌詞の前': 'thời gian 0 = tắt, trước dòng lời đầu tiên',
     '時間 0 = 無効・入場アニメ後に静止': 'thời gian 0 = tắt, đứng yên sau hoạt ảnh vào',
     '時間 0 = 無効・歌詞の後': 'thời gian 0 = tắt, sau lời bài hát',
+    '音声の最後の時刻を読む': 'Đọc thời điểm kết thúc âm thanh',
+    '⏎ 末尾': '⏎ Cuối',
     '最初の歌詞の開始時刻を読む': 'Đọc thời điểm bắt đầu của dòng lời đầu tiên',
     '間奏カウントダウン': 'Đếm ngược đoạn nghỉ',
     'テンプレートはそのまま、残り秒数を重ねます': 'Giữ nguyên mẫu, chồng số giây còn lại',

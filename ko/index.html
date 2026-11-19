@@ -59923,6 +59923,7 @@ function renderLines() {
         </span>
         <button type="button" class="icon-txt ghost cut-add sp-add" title="컷(시간 블록) 추가">＋</button>
         ${opts.readFirst ? '<button type="button" class="icon-txt ghost st-read" title="첫 가사의 시작 시각 읽기">⏎ 첫 줄</button>' : ''}
+        ${opts.readLast ? '<button type="button" class="icon-txt ghost st-readlast" title="오디오 끝 시각 읽기">⏎ 끝</button>' : ''}
       </span></div>
       <span class="sp-note-detail">${opts.note || ''}</span>`;
     const q = sel => li.querySelector(sel);
@@ -59938,7 +59939,9 @@ function renderLines() {
     q('.sp-add').addEventListener('click', () => addCut(line));
     // 各컷の레이아웃セレクト（通常줄 と同じく、재생位置で手法パネルが開く）
     const cutsEl = q('.sp-cuts');
-    const spCuts = S.plan.cuts.filter(c => c.line === line && J.LAYOUTS[c.layout] && !J.LAYOUTS[c.layout].special);
+    // special 레이아웃 (title/interlude) も選べるよう、special を除外せず全컷を出す。
+    // これで ED (既定 interlude) や OP (既定 title) にも「吊挂」等の레이아웃選択が現れる。
+    const spCuts = S.plan.cuts.filter(c => c.line === line && J.LAYOUTS[c.layout]);
     spCuts.forEach((c, k) => {
       const tech = cutTechSlot(line, k);
       const forced = tech.layout || sOv.cutLayouts && sOv.cutLayouts[k];
@@ -59973,11 +59976,27 @@ function renderLines() {
         pair.append(tIn, sel, del); cutsEl.appendChild(pair);
       } else cutsEl.appendChild(sel);
     });
+    // 컷が無い (時間 0) 時も레이아웃選択を常駐させる。镜头下拉と互斥なので重複しない。
+    if (!spCuts.length) {
+      const sel = document.createElement('select');
+      sel.className = 'lay pro-only cut-lay st-lay';
+      sel.setAttribute('aria-label', `${name} 레이아웃`);
+      lazyLay(sel, sp.layout || '');
+      sel.addEventListener('change', e => setSpecial(key, { layout: e.target.value || undefined }));
+      cutsEl.appendChild(sel);
+    }
     if (opts.readFirst) q('.st-read').addEventListener('click', () => {
       const t = S.plan.lines.length ? S.plan.lines[0].start : 0;
       setSpecial(key, { end: +t.toFixed(3), start: 0 });
       toast(`${name}: ${t.toFixed(2)} 초 읽음`);
       seek(0.001);
+    });
+    if (opts.readLast) q('.st-readlast').addEventListener('click', () => {
+      // 音声の長さを末尾時刻として読む (未読込時は歌詞全体の尺を使う)
+      const dur = S.audio && isFinite(S.audio.duration) ? S.audio.duration : (S.plan.duration || 0);
+      setSpecial(key, { start: +Math.max(0, dur - 6).toFixed(3), end: +dur.toFixed(3) });
+      toast(`${name}: ${dur.toFixed(2)} 초 읽음`);
+      seek(Math.max(0, dur - 1.2));
     });
     ol.appendChild(li); return li;
   };
@@ -60076,8 +60095,8 @@ function renderLines() {
     });
     ol.appendChild(li); S.lineEls.push(li);
   });
-  addSpecialRow('tail', '尾', '尾音 (여운·정지)', { note: '시간 0 = 사용 안 함, 등장 애니메이션 후 정지' });
-  addSpecialRow('outro', 'ED', '엔딩', { note: '시간 0 = 사용 안 함, 가사 뒤' });
+  addSpecialRow('tail', '尾', '尾音 (여운·정지)', { readLast: true, note: '시간 0 = 사용 안 함, 등장 애니메이션 후 정지' });
+  addSpecialRow('outro', 'ED', '엔딩', { readLast: true, note: '시간 0 = 사용 안 함, 가사 뒤' });
   $('linesInfo').textContent = `${S.plan.lines.length}줄 / ${S.plan.cuts.length}컷`;
   syncRangeUI();
 }
