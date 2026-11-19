@@ -203,13 +203,16 @@ class Renderer {
       ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
       ctx.filter = `blur(${(layerBlur * scale).toFixed(1)}px)`; ctx.drawImage(LX.canvas, 0, 0); ctx.restore();
     }
-    // 特殊モジュールの間奏カウントダウン: 選んだテンプレート/文字はそのままに、残り秒数を中央へ重ねる。
+    // 特殊モジュールの間奏カウントダウン: 選んだテンプレート/文字はそのままに、残り秒数を重ねる。
     // サイズは元の interlude counter (H*0.36) に対する倍率で、1 より大きくはできない。
+    // 位置はや座標のパーセント (設定が無い時は 50/50 = 中央)。
     if (mainCut && mainCut.countdown && layer !== 'back' && !opt.glyphLog) {
       const env = this.makeEnv(ctx, plan, mainCut, sc, { pass: 'main', t: tq, lt: tq - mainCut.start, ltb: tq - mainCut.start, step: Math.floor(tq / clock + 1e-6), scale, allowFilter, energy, beat: beatInfo });
       const remain = Math.max(0, mainCut.end - tr);
       const size = H * 0.36 * J.clamp(+mainCut.countdownSize || 0.6, 0.15, 1);
-      env.draw({ text: remain.toFixed(1), font: st.fonts.display[0], size, x: W / 2, y: H / 2, color: sc.fg, alpha: 0.88, ghost: false });
+      const cx = isFinite(+mainCut.countdownX) ? +mainCut.countdownX : 50;
+      const cy = isFinite(+mainCut.countdownY) ? +mainCut.countdownY : 50;
+      env.draw({ text: remain.toFixed(1), font: st.fonts.display[0], size, x: W * cx / 100, y: H * cy / 100, color: sc.fg, alpha: 0.88, ghost: false });
     }
     if (morphOn && layer !== 'back') {
       const L = this.morphLogs(plan, mPrev, MC, cw, ch, scale, opt);

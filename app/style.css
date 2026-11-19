@@ -536,16 +536,21 @@ button.small.primary { padding: 4px 12px; }
 .ln.sp .st-text { width: 100%; max-width: 128px; padding: 3px 6px; font-size: 12px; color: var(--muted); }
 .ln.sp .st-text:focus { color: var(--text); }
 .ln.sp .sp-cuts { flex: 1 1 auto; min-width: 60px; }
-.ln.sp .sp-note-detail { flex: 1 1 100%; font-size: 10px; color: var(--faint); line-height: 1.6; }
+/* 説明文は行全体にまたがせ、縦書き（22px の 1 列目に潰れる）を防ぐ */
+.ln.sp .sp-note-detail { grid-column: 1 / -1; font-size: 10px; color: var(--faint); line-height: 1.4; white-space: normal; }
 .ln.sp .sp-cd { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .ln.sp .sp-cd input { margin: 0; }
 .ln.sp .st-cdsize { width: 62px; height: 18px; padding: 0; vertical-align: middle; }
+.ln.sp .cd-pos { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.ln.sp .cd-pos input { width: 42px; padding: 2px 3px; font-size: 11px; text-align: center; }
+.ln.sp .cd-pos-sep { color: var(--faint); font-size: 11px; }
 .ln.sp.st-intro { border-color: hsla(190,70%,55%,0.5); }
 .ln.sp.st-tail  { border-color: hsla(35,80%,60%,0.5); }
 .ln.sp.st-outro { border-color: hsla(280,60%,65%,0.5); }
 #app.is-mobile .ln.sp .sp-times { display: inline-flex; }
 #app.is-mobile .ln.sp .sp-times .time { display: inline-block; }
 #app.is-mobile .ln.sp .st-cdsize { width: 48px; }
+#app.is-mobile .ln.sp .cd-pos input { width: 38px; }
 .theme-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; margin-top: 8px; }
 .theme-row select { min-width: 9em; }
 #app.is-easy .ln .cut-pair { display: none; }

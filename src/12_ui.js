@@ -685,23 +685,27 @@ function renderLines() {
       <input class="st-text" type="text" value="${escapeHtml(sp.text || '')}" placeholder="${name}">
       <div class="meta"><span class="cuts sp-cuts"></span>
       <span class="tools">
-        <label class="sp-cd" title="テンプレートはそのまま、残り秒数を中央に重ねます"><input type="checkbox" class="st-cd" ${sp.countdown ? 'checked' : ''} aria-label="${name} 間奏カウントダウン">間奏カウント</label>
+        <label class="sp-cd" title="テンプレートはそのまま、残り秒数を重ねます"><input type="checkbox" class="st-cd" ${sp.countdown ? 'checked' : ''} aria-label="${name} 間奏カウント">間奏カウント</label>
         <input type="range" class="st-cdsize" min="15" max="100" step="5" value="${Math.round(J.clamp(+sp.countdownSize || 0.6, 0.15, 1) * 100)}" title="カウントダウンの大きさ（最大は元のサイズ）" aria-label="${name} カウントダウンサイズ">
+        <span class="cd-pos" title="カウントダウンの開始座標（%（50/50 = 中央））">
+          <input type="number" class="st-cdx mono" min="0" max="100" step="1" value="${isFinite(+sp.countdownX) ? +sp.countdownX : 50}" aria-label="${name} カウントダウン横座標（%）">
+          <span class="cd-pos-sep">,</span>
+          <input type="number" class="st-cdy mono" min="0" max="100" step="1" value="${isFinite(+sp.countdownY) ? +sp.countdownY : 50}" aria-label="${name} カウントダウン縦座標（%）">
+        </span>
         <button type="button" class="icon-txt ghost cut-add sp-add" title="カット（時間ブロック）を増やす">＋</button>
         ${opts.readFirst ? '<button type="button" class="icon-txt ghost st-read" title="最初の歌詞の開始時刻を読む">⏎ 初行</button>' : ''}
-        <select class="lay pro-only st-lay" aria-label="${name} レイアウト"></select>
       </span></div>
       <span class="sp-note-detail">${opts.note || ''}</span>`;
     const q = sel => li.querySelector(sel);
-    lazyLay(q('.st-lay'), sp.layout || '');
     const bind = (sel, field, num) => q(sel).addEventListener('change', e => {
       const v = num ? (isFinite(parseFloat(e.target.value)) ? +parseFloat(e.target.value).toFixed(3) : 0) : e.target.value;
       setSpecial(key, { [field]: v });
     });
     bind('.st-start', 'start', true); bind('.st-end', 'end', true);
-    bind('.st-text', 'text', false); bind('.st-lay', 'layout', false);
+    bind('.st-text', 'text', false);
     q('.st-cd').addEventListener('change', e => { remember(); setSpecial(key, { countdown: e.target.checked }); commit(); });
     q('.st-cdsize').addEventListener('input', e => { remember(); setSpecial(key, { countdownSize: +e.target.value / 100 }); commit(); });
+    bind('.st-cdx', 'countdownX', true); bind('.st-cdy', 'countdownY', true);
     q('.sp-add').addEventListener('click', () => addCut(line));
     // 各カットのレイアウトセレクト（通常行と同じく、再生位置で手法パネルが開く）
     const cutsEl = q('.sp-cuts');

@@ -28,9 +28,9 @@ J.defaultProject = () => ({
   // intro.end は既定で「最初の歌詞の開始時刻」を読む (UI のボタン/手入力で上書き可)
   // tail は入場アニメの後、最後の絵で静止する (freeze)。text は空でもよい
   specials: {
-    intro: { start: 0, end: 0, text: '', layout: '', autoEnd: true, countdown: false, countdownSize: 0.6 },
-    tail:  { start: 0, end: 0, text: '', layout: '', countdown: false, countdownSize: 0.6 },
-    outro: { start: 0, end: 0, text: '', layout: '', countdown: false, countdownSize: 0.6 },
+    intro: { start: 0, end: 0, text: '', layout: '', autoEnd: true, countdown: false, countdownSize: 0.6, countdownX: 50, countdownY: 50 },
+    tail:  { start: 0, end: 0, text: '', layout: '', countdown: false, countdownSize: 0.6, countdownX: 50, countdownY: 50 },
+    outro: { start: 0, end: 0, text: '', layout: '', countdown: false, countdownSize: 0.6, countdownX: 50, countdownY: 50 },
   },
   unify: false,                   // 統一感: part palettes, repeats shown the same way, キメ, モーフ, 太さ
   typeset: false,                 // 文字整列: kana tracking, small particles / big first character, Latin sizing, 0.2 s lead, restraint
@@ -696,7 +696,13 @@ J.plan = (project, audio) => {
         treat, treatP, bg, bgP, cam, camP, trans, transP, transDur });
       cut.special = line;                               // -2 intro / -3 tail / -4 outro
       cut.noJoin = true;                                // 前後のカットとつなぎ・モーフしない
-      if (spec.countdown) { cut.countdown = true; cut.countdownSize = J.clamp(+spec.countdownSize || 0.6, 0.15, 1); }
+      if (spec.countdown) {
+        cut.countdown = true;
+        cut.countdownSize = J.clamp(+spec.countdownSize || 0.6, 0.15, 1);
+        const cx = +spec.countdownX, cy = +spec.countdownY;
+        cut.countdownX = J.clamp(isFinite(cx) ? cx : 50, 0, 100);
+        cut.countdownY = J.clamp(isFinite(cy) ? cy : 50, 0, 100);
+      }
       if (line === -3) { cut.freeze = true; cut.freezeAt = cs + inDur; }   // 尾音: 入場アニメ後に静止
       plan.cuts.push(cut);
     }

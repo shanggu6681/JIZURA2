@@ -559,16 +559,21 @@ button.small.primary { padding: 4px 12px; }
 .ln.sp .st-text { width: 100%; max-width: 128px; padding: 3px 6px; font-size: 12px; color: var(--muted); }
 .ln.sp .st-text:focus { color: var(--text); }
 .ln.sp .sp-cuts { flex: 1 1 auto; min-width: 60px; }
-.ln.sp .sp-note-detail { flex: 1 1 100%; font-size: 10px; color: var(--faint); line-height: 1.6; }
+/* 説明文は行全体にまたがせ、縦書き（22px の 1 列目に潰れる）を防ぐ */
+.ln.sp .sp-note-detail { grid-column: 1 / -1; font-size: 10px; color: var(--faint); line-height: 1.4; white-space: normal; }
 .ln.sp .sp-cd { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .ln.sp .sp-cd input { margin: 0; }
 .ln.sp .st-cdsize { width: 62px; height: 18px; padding: 0; vertical-align: middle; }
+.ln.sp .cd-pos { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.ln.sp .cd-pos input { width: 42px; padding: 2px 3px; font-size: 11px; text-align: center; }
+.ln.sp .cd-pos-sep { color: var(--faint); font-size: 11px; }
 .ln.sp.st-intro { border-color: hsla(190,70%,55%,0.5); }
 .ln.sp.st-tail  { border-color: hsla(35,80%,60%,0.5); }
 .ln.sp.st-outro { border-color: hsla(280,60%,65%,0.5); }
 #app.is-mobile .ln.sp .sp-times { display: inline-flex; }
 #app.is-mobile .ln.sp .sp-times .time { display: inline-block; }
 #app.is-mobile .ln.sp .st-cdsize { width: 48px; }
+#app.is-mobile .ln.sp .cd-pos input { width: 38px; }
 .theme-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; margin-top: 8px; }
 .theme-row select { min-width: 9em; }
 #app.is-easy .ln .cut-pair { display: none; }
@@ -3664,9 +3669,9 @@ J.defaultProject = () => ({
   // intro.end は既定で「最初の歌詞の開始時刻」を読む (UI のボタン/手入力で上書き可)
   // tail は入場アニメの後、最後の絵で静止する (freeze)。text は空でもよい
   specials: {
-    intro: { start: 0, end: 0, text: '', layout: '', autoEnd: true, countdown: false, countdownSize: 0.6 },
-    tail:  { start: 0, end: 0, text: '', layout: '', countdown: false, countdownSize: 0.6 },
-    outro: { start: 0, end: 0, text: '', layout: '', countdown: false, countdownSize: 0.6 },
+    intro: { start: 0, end: 0, text: '', layout: '', autoEnd: true, countdown: false, countdownSize: 0.6, countdownX: 50, countdownY: 50 },
+    tail:  { start: 0, end: 0, text: '', layout: '', countdown: false, countdownSize: 0.6, countdownX: 50, countdownY: 50 },
+    outro: { start: 0, end: 0, text: '', layout: '', countdown: false, countdownSize: 0.6, countdownX: 50, countdownY: 50 },
   },
   unify: false,                   // 統一感: part palettes, repeats shown the same way, キメ, モーフ, 太さ
   typeset: false,                 // 文字整列: kana tracking, small particles / big first character, Latin sizing, 0.2 s lead, restraint
@@ -4332,7 +4337,13 @@ J.plan = (project, audio) => {
         treat, treatP, bg, bgP, cam, camP, trans, transP, transDur });
       cut.special = line;                               // -2 intro / -3 tail / -4 outro
       cut.noJoin = true;                                // 前後のカットとつなぎ・モーフしない
-      if (spec.countdown) { cut.countdown = true; cut.countdownSize = J.clamp(+spec.countdownSize || 0.6, 0.15, 1); }
+      if (spec.countdown) {
+        cut.countdown = true;
+        cut.countdownSize = J.clamp(+spec.countdownSize || 0.6, 0.15, 1);
+        const cx = +spec.countdownX, cy = +spec.countdownY;
+        cut.countdownX = J.clamp(isFinite(cx) ? cx : 50, 0, 100);
+        cut.countdownY = J.clamp(isFinite(cy) ? cy : 50, 0, 100);
+      }
       if (line === -3) { cut.freeze = true; cut.freezeAt = cs + inDur; }   // 尾音: 入場アニメ後に静止
       plan.cuts.push(cut);
     }
@@ -5125,13 +5136,16 @@ class Renderer {
       ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
       ctx.filter = `blur(${(layerBlur * scale).toFixed(1)}px)`; ctx.drawImage(LX.canvas, 0, 0); ctx.restore();
     }
-    // 特殊モジュールの間奏カウントダウン: 選んだテンプレート/文字はそのままに、残り秒数を中央へ重ねる。
+    // 特殊モジュールの間奏カウントダウン: 選んだテンプレート/文字はそのままに、残り秒数を重ねる。
     // サイズは元の interlude counter (H*0.36) に対する倍率で、1 より大きくはできない。
+    // 位置はや座標のパーセント (設定が無い時は 50/50 = 中央)。
     if (mainCut && mainCut.countdown && layer !== 'back' && !opt.glyphLog) {
       const env = this.makeEnv(ctx, plan, mainCut, sc, { pass: 'main', t: tq, lt: tq - mainCut.start, ltb: tq - mainCut.start, step: Math.floor(tq / clock + 1e-6), scale, allowFilter, energy, beat: beatInfo });
       const remain = Math.max(0, mainCut.end - tr);
       const size = H * 0.36 * J.clamp(+mainCut.countdownSize || 0.6, 0.15, 1);
-      env.draw({ text: remain.toFixed(1), font: st.fonts.display[0], size, x: W / 2, y: H / 2, color: sc.fg, alpha: 0.88, ghost: false });
+      const cx = isFinite(+mainCut.countdownX) ? +mainCut.countdownX : 50;
+      const cy = isFinite(+mainCut.countdownY) ? +mainCut.countdownY : 50;
+      env.draw({ text: remain.toFixed(1), font: st.fonts.display[0], size, x: W * cx / 100, y: H * cy / 100, color: sc.fg, alpha: 0.88, ghost: false });
     }
     if (morphOn && layer !== 'back') {
       const L = this.morphLogs(plan, mPrev, MC, cw, ch, scale, opt);
@@ -59377,23 +59391,27 @@ function renderLines() {
       <input class="st-text" type="text" value="${escapeHtml(sp.text || '')}" placeholder="${name}">
       <div class="meta"><span class="cuts sp-cuts"></span>
       <span class="tools">
-        <label class="sp-cd" title="テンプレートはそのまま、残り秒数を中央に重ねます"><input type="checkbox" class="st-cd" ${sp.countdown ? 'checked' : ''} aria-label="${name} 間奏カウントダウン">間奏カウント</label>
+        <label class="sp-cd" title="テンプレートはそのまま、残り秒数を重ねます"><input type="checkbox" class="st-cd" ${sp.countdown ? 'checked' : ''} aria-label="${name} 間奏カウント">間奏カウント</label>
         <input type="range" class="st-cdsize" min="15" max="100" step="5" value="${Math.round(J.clamp(+sp.countdownSize || 0.6, 0.15, 1) * 100)}" title="カウントダウンの大きさ（最大は元のサイズ）" aria-label="${name} カウントダウンサイズ">
+        <span class="cd-pos" title="カウントダウンの開始座標（%（50/50 = 中央））">
+          <input type="number" class="st-cdx mono" min="0" max="100" step="1" value="${isFinite(+sp.countdownX) ? +sp.countdownX : 50}" aria-label="${name} カウントダウン横座標（%）">
+          <span class="cd-pos-sep">,</span>
+          <input type="number" class="st-cdy mono" min="0" max="100" step="1" value="${isFinite(+sp.countdownY) ? +sp.countdownY : 50}" aria-label="${name} カウントダウン縦座標（%）">
+        </span>
         <button type="button" class="icon-txt ghost cut-add sp-add" title="カット（時間ブロック）を増やす">＋</button>
         ${opts.readFirst ? '<button type="button" class="icon-txt ghost st-read" title="最初の歌詞の開始時刻を読む">⏎ 初行</button>' : ''}
-        <select class="lay pro-only st-lay" aria-label="${name} レイアウト"></select>
       </span></div>
       <span class="sp-note-detail">${opts.note || ''}</span>`;
     const q = sel => li.querySelector(sel);
-    lazyLay(q('.st-lay'), sp.layout || '');
     const bind = (sel, field, num) => q(sel).addEventListener('change', e => {
       const v = num ? (isFinite(parseFloat(e.target.value)) ? +parseFloat(e.target.value).toFixed(3) : 0) : e.target.value;
       setSpecial(key, { [field]: v });
     });
     bind('.st-start', 'start', true); bind('.st-end', 'end', true);
-    bind('.st-text', 'text', false); bind('.st-lay', 'layout', false);
+    bind('.st-text', 'text', false);
     q('.st-cd').addEventListener('change', e => { remember(); setSpecial(key, { countdown: e.target.checked }); commit(); });
     q('.st-cdsize').addEventListener('input', e => { remember(); setSpecial(key, { countdownSize: +e.target.value / 100 }); commit(); });
+    bind('.st-cdx', 'countdownX', true); bind('.st-cdy', 'countdownY', true);
     q('.sp-add').addEventListener('click', () => addCut(line));
     // 各カットのレイアウトセレクト（通常行と同じく、再生位置で手法パネルが開く）
     const cutsEl = q('.sp-cuts');
