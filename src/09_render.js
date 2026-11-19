@@ -14,6 +14,17 @@ J.cutAt = (plan, t) => {
   const c = cs[ans];
   return t < c.end ? c : null;
 };
+// 尾音 (freeze cut): after its entrance animation ends the frame holds perfectly still —
+// background, camera, text, effects and grain all evaluate at the same frozen time.
+// The playback head (S.t) keeps advancing; only the rendered moment is pinned.
+J.freezeTime = (plan, t) => {
+  const cs = plan.cuts;
+  for (let i = 0; i < cs.length; i++) {
+    const c = cs[i];
+    if (c.freeze && t >= c.freezeAt && t < c.end) return c.freezeAt;
+  }
+  return t;
+};
 
 class Renderer {
   constructor() {
@@ -59,11 +70,15 @@ class Renderer {
     const W = plan.W, H = plan.H, scale = opt.scale || 1;
     const cw = ctx.canvas.width, ch = ctx.canvas.height;
     const fx = plan.fx, st = plan.style, fps = plan.fps;
+    // tail freeze: find which cut the real time is in, then pin the *rendered* moment after the animation
+    const realCut = J.cutAt(plan, t);
+    const tr = realCut && realCut.freeze && t >= realCut.freezeAt ? realCut.freezeAt : t;
     // motion is quantised to 'koma' drawings per second (24fps timebase); random flicker runs on a <=24Hz clock
     const stepDur = J.stepDur(fx, fps);
     const clock = J.komaOf(fx) > 0 ? stepDur : 1 / 24;
-    const tq = Math.floor(t / stepDur + 1e-6) * stepDur;
-    const mainCut = J.cutAt(plan, tq);
+    const tqReal = Math.floor(t / stepDur + 1e-6) * stepDur;
+    const mainCut = J.cutAt(plan, tqReal);                     // cut identity follows the real playhead
+    const tq = Math.floor(tr / stepDur + 1e-6) * stepDur;       // animated moment is frozen for tail cuts
     const sc = st.schemes[mainCut ? mainCut.scheme % st.schemes.length : 0] || st.schemes[0];
     const allowFilter = this.filterOK && !opt.fast;
     if (J.setLang) J.setLang(plan.lang || 'ja');           // faces follow the plan's lyric language
@@ -96,19 +111,19 @@ class Renderer {
     const events = plan.events;
     let spike = 0, shake = 0, beatPulse = 0;
     for (let i = 0; i < events.length; i++) {
-      const ev = events[i]; if (ev.t > t) break; const dt = (t - ev.t) * 24;
+      const ev = events[i]; if (ev.t > tr) break; const dt = (tr - ev.t) * 24;
       if (dt > 14) continue;
       if (ev.type === 'chroma') spike += ev.amp * Math.pow(0.55, dt);
       else if (ev.type === 'shake') shake += ev.amp * Math.pow(0.62, dt);
     }
     if (plan.beats && plan.beats.length) {
-      const b = prevBeat(plan.beats, t);
-      if (b != null && t - b < 0.25) beatPulse = 0.9 * Math.exp(-(t - b) * 16);
+      const b = prevBeat(plan.beats, tr);
+      if (b != null && tr - b < 0.25) beatPulse = 0.9 * Math.exp(-(tr - b) * 16);
     }
     const chroma = (fx.chroma ?? 0.7) * (st.ghost ?? 1) * (1 + spike + beatPulse);
     const step = Math.floor(tq / clock + 1e-6);
     const beatInfo = plan.beats && plan.beats.length ? beatAt(plan.beats, tq) : null;
-    const energy = plan.energy ? plan.energy[Math.min(plan.energy.length - 1, Math.max(0, Math.floor(t * plan.energyRate)))] : null;
+    const energy = plan.energy ? plan.energy[Math.min(plan.energy.length - 1, Math.max(0, Math.floor(tr * plan.energyRate)))] : null;
     // ---------- background graphic (per line) ----------
     // 透過PNG 前景／後景 (opt.layer): 'back' = background graphic + the decorations behind the lyrics, 'front' = the rest
     const layer = opt.transparent ? opt.layer || null : null;
@@ -188,6 +203,14 @@ class Renderer {
       ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
       ctx.filter = `blur(${(layerBlur * scale).toFixed(1)}px)`; ctx.drawImage(LX.canvas, 0, 0); ctx.restore();
     }
+    // 特殊モジュールの間奏カウントダウン: 選んだテンプレート/文字はそのままに、残り秒数を中央へ重ねる。
+    // サイズは元の interlude counter (H*0.36) に対する倍率で、1 より大きくはできない。
+    if (mainCut && mainCut.countdown && layer !== 'back' && !opt.glyphLog) {
+      const env = this.makeEnv(ctx, plan, mainCut, sc, { pass: 'main', t: tq, lt: tq - mainCut.start, ltb: tq - mainCut.start, step: Math.floor(tq / clock + 1e-6), scale, allowFilter, energy, beat: beatInfo });
+      const remain = Math.max(0, mainCut.end - tr);
+      const size = H * 0.36 * J.clamp(+mainCut.countdownSize || 0.6, 0.15, 1);
+      env.draw({ text: remain.toFixed(1), font: st.fonts.display[0], size, x: W / 2, y: H / 2, color: sc.fg, alpha: 0.88, ghost: false });
+    }
     if (morphOn && layer !== 'back') {
       const L = this.morphLogs(plan, mPrev, MC, cw, ch, scale, opt);
       const k = J.clamp(mlt / MC.morph.dur), e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
@@ -215,7 +238,7 @@ class Renderer {
     }
     ctx.restore();
     // ---------- post ----------
-    if (!opt.noPost) this.post(ctx, plan, t, tq, step, sc, scale, opt, allowFilter);
+    if (!opt.noPost) this.post(ctx, plan, tr, tq, step, sc, scale, opt, allowFilter);
     if (key && !opt.noPost) this.keyFinish(ctx, key, opt);
   }
 

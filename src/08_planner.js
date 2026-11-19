@@ -24,6 +24,14 @@ J.defaultProject = () => ({
   extra2: false,                  // 追加分2: the parts added in v0.12 (themed ones also need their own set's switch)
   lang: 'auto',                   // 歌詞の言語: 'auto' | 'ja' | 'zh-Hant' | 'zh-Hans' | 'ko' — picks the faces each font key is drawn with
   keyBg: 'off',                   // 合成用の背景: 'off' | 'green' (グリーンバック) | 'black' (ブラックバック)
+  // 特殊モジュール: オープニング / サビ後ろの余韻 / エンディング。時間 0 = 無効（表示だけ常驻）
+  // intro.end は既定で「最初の歌詞の開始時刻」を読む (UI のボタン/手入力で上書き可)
+  // tail は入場アニメの後、最後の絵で静止する (freeze)。text は空でもよい
+  specials: {
+    intro: { start: 0, end: 0, text: '', layout: '', autoEnd: true, countdown: false, countdownSize: 0.6 },
+    tail:  { start: 0, end: 0, text: '', layout: '', countdown: false, countdownSize: 0.6 },
+    outro: { start: 0, end: 0, text: '', layout: '', countdown: false, countdownSize: 0.6 },
+  },
   unify: false,                   // 統一感: part palettes, repeats shown the same way, キメ, モーフ, 太さ
   typeset: false,                 // 文字整列: kana tracking, small particles / big first character, Latin sizing, 0.2 s lead, restraint
   centerDir: 'tb',                // 中央を空ける on tall frames: 'tb' = top / bottom, 'lr' = left / right
@@ -338,7 +346,11 @@ J.plan = (project, audio) => {
 
   // title card
   const firstStart = tm.starts.length ? tm.starts[0] : 0;
-  if (title && firstStart >= 1.1) {
+  const SP = project.specials || {};
+  const introSpec = SP.intro || {}, tailSpec = SP.tail || {}, outroSpec = SP.outro || {};
+  // a user-set intro module (line -2) replaces the automatic title card; otherwise keep the original behaviour
+  const introOn = +introSpec.end > 0;
+  if (title && firstStart >= 1.1 && !introOn) {
     const rng = J.rng(J.h(project.seed, 999));
     plan.cuts.push(makeCut({ text: title, note: artist, lineText: title, line: -1, start: 0.1, end: firstStart - 0.04, layout: 'title', enter: rng.pick(['blur', 'type', 'wipe', 'assemble']), exit: rng.pick(['blur', 'drift', 'wipe']), hold: 'still', params: J.LAYOUTS.title.plan(rng, {}, st), decor: [], scheme: 0, seed: J.h(project.seed, 999, 1) }));
   }
@@ -618,6 +630,81 @@ J.plan = (project, audio) => {
       plan.cuts.push(makeCut({ text: title || '', lineText: '', line: li, start: visEnd, end: nextStart, layout: 'interlude', enter: 'blur', exit: 'blur', hold: 'still', inDur: 0.3, outDur: 0.3, params: J.LAYOUTS.interlude.plan(r2), decor: pickDecor(r2, st, en, Object.assign({}, fx, { decor: 1 }), 'interlude'), scheme: schemeIdx, seed: J.h(lineSeed, 405) }));
     }
   });
+  // ---------------------------------------------------------------------------
+  // 特殊モジュール: オープニング (-2) / 余韻・尾音 (-3) / エンディング (-4)
+  // 時間 0 (未設定) のときは生成しない。ほかは通常のカットと同じく描画される。
+  // ---------------------------------------------------------------------------
+  const mkSpecial = (spec, line, dfltLayout) => {
+    const s = Math.max(0, +spec.start || 0), e = Math.max(0, +spec.end || 0);
+    if (!(e > s + 0.04)) return;                       // 時間が無効 → このモジュールは存在しない
+    const ov = (project.overrides || {})[line] || {};
+    const text = spec.text || '';
+    const n = J.clamp(Math.round(+ov.cuts || 1), 1, 12);
+    const dur = e - s;
+    // 通常行と同じくカット境界を等分し、cutTime (行頭からの秒) で手動指定を反映する
+    const bounds = [s];
+    for (let k = 1; k <= n; k++) bounds.push(k === n ? e : s + dur * k / n);
+    if (ov.cutTime && typeof ov.cutTime === 'object') {
+      for (let k = 1; k < n; k++) { const d = +ov.cutTime[k]; if (ov.cutTime[k] != null && isFinite(d)) bounds[k] = J.clamp(s + d, s + 0.1 * k, e - 0.1 * (n - k)); }
+      for (let k = 1; k < n; k++) if (bounds[k] < bounds[k - 1] + 0.1) bounds[k] = bounds[k - 1] + 0.1;
+      for (let k = n - 1; k >= 1; k--) if (bounds[k] > bounds[k + 1] - 0.1) bounds[k] = bounds[k + 1] - 0.1;
+    }
+    for (let k = 0; k < n; k++) {
+      const cs = bounds[k], ce = bounds[k + 1], cd = ce - cs;
+      if (cd < 0.04) continue;
+      const tech = cutTechOf(ov, k);                    // このカットだけの手法指定 (手法パネルから保存)
+      const ct = ov.cutText && (ov.cutText[k] || ov.cutText[String(k)]);
+      const txt = ct && typeof ct.main === 'string' && ct.main.length ? ct.main : text;
+      const nn = Math.max(1, [...txt.replace(/\s+/g, '')].length);
+      const wantLayout = (tech.layout && J.LAYOUTS[tech.layout] && !J.LAYOUTS[tech.layout].special) ? tech.layout
+        : (ov.layout && J.LAYOUTS[ov.layout] && !J.LAYOUTS[ov.layout].special) ? ov.layout
+        : (spec.layout && J.LAYOUTS[spec.layout] && !J.LAYOUTS[spec.layout].special) ? spec.layout : null;
+      const layout = wantLayout || (txt ? dfltLayout : 'interlude');
+      const LD = J.LAYOUTS[layout] || J.LAYOUTS.interlude;
+      const rng = J.rng(J.h(project.seed, 1700 + line, k));
+      const durs = (en2, ex2) => {
+        let a = J.clamp(cd * 0.36, 0.12, 0.6);
+        if (en2 === 'type') a = J.clamp(nn * 0.055 + 0.1, 0.15, cd * 0.65);
+        if (J.ENTER[en2] && J.ENTER[en2].inDur) a = J.ENTER[en2].inDur(cd, nn);
+        if (en2 === 'cut') a = 0.12;
+        let b = ex2 === 'cut' ? 0 : J.clamp(cd * 0.3, 0.14, 0.55);
+        if (J.EXIT[ex2] && J.EXIT[ex2].outDur) b = J.EXIT[ex2].outDur(cd, nn);
+        if (a + b > cd * 0.92) { const f = cd * 0.92 / (a + b); a *= f; b *= f; }
+        return [a, b];
+      };
+      let enter = tech.enter && J.ENTER[tech.enter] ? tech.enter : 'blur';
+      let exit = tech.exit && J.EXIT[tech.exit] ? tech.exit : 'cut';
+      const hold = tech.hold && J.HOLD[tech.hold] ? tech.hold : 'still';
+      let [inDur, outDur] = durs(enter, exit);
+      let params = {};
+      try { params = LD.plan(J.rng(J.h(project.seed, 1700 + line, k, 91)), { text: txt, n: nn, W, H, dur: cd }, st); } catch (err) { params = {}; }
+      if (layout === 'interlude') params = Object.assign({ variant: 'quiet', showTitle: false, titleText: '' }, params);
+      let decor = tech.decor !== undefined
+        ? (tech.decor && tech.decor !== 'none' && J.DECOR[tech.decor] ? [decorParams(J.rng(J.h(project.seed, 1700 + line, k, 92)), tech.decor)] : [])
+        : [];
+      const treat = tech.treat && J.TREAT[tech.treat] ? tech.treat : 'none';
+      const treatP = J.TREAT[treat] && J.TREAT[treat].plan ? J.TREAT[treat].plan(J.rng(J.h(project.seed, 1700 + line, k, 93)), st) : {};
+      const bg = tech.bg && J.BG[tech.bg] ? tech.bg : 'none';
+      const bgP = J.BG[bg] && J.BG[bg].plan ? J.BG[bg].plan(J.rng(J.h(project.seed, 1700 + line, k, 94)), st) : {};
+      const cam = tech.cam && J.CAMERA[tech.cam] ? tech.cam : 'push';
+      const camP = J.CAMERA[cam] && J.CAMERA[cam].plan ? J.CAMERA[cam].plan(J.rng(J.h(project.seed, 1700 + line, k, 95)), st) : {};
+      const trans = tech.trans && tech.trans !== 'none' && J.TRANS[tech.trans] ? tech.trans : null;
+      const transP = trans && J.TRANS[trans].plan ? J.TRANS[trans].plan(J.rng(J.h(project.seed, 1700 + line, k, 96)), st) : {};
+      const transDur = trans ? J.clamp((J.TRANS[trans].dur || 0.35), 0.12, Math.min(0.6, cd * 0.45)) : 0;
+      const cut = makeCut({ text: txt, lineText: text, note: null, line, start: cs, end: ce, layout, enter, exit, hold, inDur, outDur,
+        params, decor, scheme: 0, seed: J.h(project.seed, 1700 + line, k + 1), words: J.chunkText(txt),
+        treat, treatP, bg, bgP, cam, camP, trans, transP, transDur });
+      cut.special = line;                               // -2 intro / -3 tail / -4 outro
+      cut.noJoin = true;                                // 前後のカットとつなぎ・モーフしない
+      if (spec.countdown) { cut.countdown = true; cut.countdownSize = J.clamp(+spec.countdownSize || 0.6, 0.15, 1); }
+      if (line === -3) { cut.freeze = true; cut.freezeAt = cs + inDur; }   // 尾音: 入場アニメ後に静止
+      plan.cuts.push(cut);
+    }
+  };
+  mkSpecial(introSpec, -2, 'title');
+  mkSpecial(tailSpec, -3, 'center');
+  mkSpecial(outroSpec, -4, 'interlude');
+
   plan.cuts.sort((a, b) => a.start - b.start);
   plan.cuts.forEach((c, i) => {
     c.index = i;

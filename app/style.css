@@ -521,6 +521,31 @@ button.small.primary { padding: 4px 12px; }
 .ln .cut-time { width: 64px; font-size: 11px; padding: 2px 4px; }
 .ln .cut-time.is-forced { border-color: var(--amber); }
 .ln .cut-lay.playing { box-shadow: 0 0 0 2px var(--amber); }
+/* カットの増減ボタン */
+.ln .cut-add, .ln .cut-del { padding: 1px 5px; min-width: 20px; text-align: center; }
+.ln .cut-del { color: var(--faint); }
+.ln .cut-del:hover { color: #e0603c; border-color: #e0603c; }
+/* 特殊モジュール行 (片头 / 尾音 / 片尾) */
+.ln.sp { border-color: var(--line2); border-style: dashed; grid-template-columns: 22px 140px minmax(0, 1fr); }
+.ln.sp .no { color: var(--cyan); font-weight: 700; }
+/* 時間框は通常行と同じ幅・高さ。2 つ並べるので列自体を広げる */
+.ln.sp .sp-times { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.ln.sp .sp-times .time { width: 66px; font-size: 12px; padding: 3px 5px; text-align: center; }
+.ln.sp .sp-sep { color: var(--faint); font-size: 12px; }
+/* 文字输入框缩短: longer text is edited in the per-cut box under 手法 */
+.ln.sp .st-text { width: 100%; max-width: 128px; padding: 3px 6px; font-size: 12px; color: var(--muted); }
+.ln.sp .st-text:focus { color: var(--text); }
+.ln.sp .sp-cuts { flex: 1 1 auto; min-width: 60px; }
+.ln.sp .sp-note-detail { flex: 1 1 100%; font-size: 10px; color: var(--faint); line-height: 1.6; }
+.ln.sp .sp-cd { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.ln.sp .sp-cd input { margin: 0; }
+.ln.sp .st-cdsize { width: 62px; height: 18px; padding: 0; vertical-align: middle; }
+.ln.sp.st-intro { border-color: hsla(190,70%,55%,0.5); }
+.ln.sp.st-tail  { border-color: hsla(35,80%,60%,0.5); }
+.ln.sp.st-outro { border-color: hsla(280,60%,65%,0.5); }
+#app.is-mobile .ln.sp .sp-times { display: inline-flex; }
+#app.is-mobile .ln.sp .sp-times .time { display: inline-block; }
+#app.is-mobile .ln.sp .st-cdsize { width: 48px; }
 .theme-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; margin-top: 8px; }
 .theme-row select { min-width: 9em; }
 #app.is-easy .ln .cut-pair { display: none; }

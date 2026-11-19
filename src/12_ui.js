@@ -438,7 +438,16 @@ const cutPick = { g: null, line: -1, k: -1 };
 let lastCutIdx = -2;
 
 function lyricCutK(cut) {
-  if (!cut || cut.line < 0) return -1;
+  if (!cut) return -1;
+  if (cut.line < 0) {                                   // 特殊モジュール (-2/-3/-4): 0 から始まるカット番号
+    let k = 0;
+    for (const c of S.plan.cuts) {
+      if (c.line !== cut.line) continue;
+      if (c.index === cut.index) return k;
+      k++;
+    }
+    return -1;
+  }
   let k = 0;
   for (const c of S.plan.cuts) {
     if (c.line !== cut.line) continue;
@@ -453,7 +462,7 @@ function cutQuietSlot(line, k) {
   return (o.cutQuiet && (o.cutQuiet[k] || o.cutQuiet[String(k)])) || {};
 }
 function markCutQuiet(i, k, groups, on) {
-  if (i == null || i < 0 || k == null || k < 0) return;
+  if (i == null || k == null || k < 0) return;          // i < 0: 特殊モジュール行も指定可能
   const cur = Object.assign({}, S.project.overrides[i] || {});
   const cutQuiet = Object.assign({}, cur.cutQuiet || {});
   const q = Object.assign({}, cutQuiet[k] || cutQuiet[String(k)] || {});
@@ -663,6 +672,83 @@ function renderLines() {
     for (const ev of ['pointerdown', 'mousedown', 'focus', 'keydown', 'touchstart']) sel.addEventListener(ev, fill, { capture: true, passive: true });
   };
   const cutOpts = '<option value="">カット 自動</option>' + [1, 2, 3, 4, 5, 6].map(n => `<option value="${n}">カット ${n}</option>`).join('');
+  // 特殊モジュール行 (オープニング / 尾音 / エンディング)。時間 0 = 無効。常に列表に居る。
+  // 通常行と同じ「手法パネル・カット数・レイアウト」を使えるようにし、さらに間奏カウントダウンを載せる。
+  const SP_LINE = { intro: -2, tail: -3, outro: -4 };
+  const addSpecialRow = (key, badge, name, opts = {}) => {
+    const sp = (S.project.specials || {})[key] || {};
+    const line = SP_LINE[key];
+    const sOv = ov[line] || {};
+    const li = document.createElement('li'); li.className = 'ln sp sp-' + key;
+    li.innerHTML = `<span class="no" title="${name}">${badge}</span>
+      <span class="sp-times"><input class="time st-start mono" type="number" step="0.01" min="0" value="${(+sp.start || 0).toFixed(2)}" aria-label="${name} 開始秒"><span class="sp-sep">→</span><input class="time st-end mono" type="number" step="0.01" min="0" value="${(+sp.end || 0).toFixed(2)}" aria-label="${name} 終了秒"></span>
+      <input class="st-text" type="text" value="${escapeHtml(sp.text || '')}" placeholder="${name}">
+      <div class="meta"><span class="cuts sp-cuts"></span>
+      <span class="tools">
+        <label class="sp-cd" title="テンプレートはそのまま、残り秒数を中央に重ねます"><input type="checkbox" class="st-cd" ${sp.countdown ? 'checked' : ''} aria-label="${name} 間奏カウントダウン">間奏カウント</label>
+        <input type="range" class="st-cdsize" min="15" max="100" step="5" value="${Math.round(J.clamp(+sp.countdownSize || 0.6, 0.15, 1) * 100)}" title="カウントダウンの大きさ（最大は元のサイズ）" aria-label="${name} カウントダウンサイズ">
+        <button type="button" class="icon-txt ghost cut-add sp-add" title="カット（時間ブロック）を増やす">＋</button>
+        ${opts.readFirst ? '<button type="button" class="icon-txt ghost st-read" title="最初の歌詞の開始時刻を読む">⏎ 初行</button>' : ''}
+        <select class="lay pro-only st-lay" aria-label="${name} レイアウト"></select>
+      </span></div>
+      <span class="sp-note-detail">${opts.note || ''}</span>`;
+    const q = sel => li.querySelector(sel);
+    lazyLay(q('.st-lay'), sp.layout || '');
+    const bind = (sel, field, num) => q(sel).addEventListener('change', e => {
+      const v = num ? (isFinite(parseFloat(e.target.value)) ? +parseFloat(e.target.value).toFixed(3) : 0) : e.target.value;
+      setSpecial(key, { [field]: v });
+    });
+    bind('.st-start', 'start', true); bind('.st-end', 'end', true);
+    bind('.st-text', 'text', false); bind('.st-lay', 'layout', false);
+    q('.st-cd').addEventListener('change', e => { remember(); setSpecial(key, { countdown: e.target.checked }); commit(); });
+    q('.st-cdsize').addEventListener('input', e => { remember(); setSpecial(key, { countdownSize: +e.target.value / 100 }); commit(); });
+    q('.sp-add').addEventListener('click', () => addCut(line));
+    // 各カットのレイアウトセレクト（通常行と同じく、再生位置で手法パネルが開く）
+    const cutsEl = q('.sp-cuts');
+    const spCuts = S.plan.cuts.filter(c => c.line === line && J.LAYOUTS[c.layout] && !J.LAYOUTS[c.layout].special);
+    spCuts.forEach((c, k) => {
+      const tech = cutTechSlot(line, k);
+      const forced = tech.layout || sOv.cutLayouts && sOv.cutLayouts[k];
+      const sel = document.createElement('select');
+      sel.className = 'cut-lay pro-only' + (forced ? ' is-forced' : '');
+      lazyLay(sel, forced || c.layout);
+      sel.title = `${c.text}｜${J.ENTER[c.enter].name} → ${J.EXIT[c.exit].name}`;
+      sel.setAttribute('aria-label', `${name} カット${k + 1}のレイアウト`);
+      sel.style.borderColor = `hsla(${layoutHue(c.layout)},70%,58%,0.7)`;
+      sel.addEventListener('pointerdown', () => seek(c.start + Math.min(c.dur * 0.5, c.inDur + 0.05)));
+      sel.addEventListener('change', e => { setCutTech(line, k, 'layout', e.target.value || undefined); replan(); seek(c.start + Math.min(c.dur * 0.5, c.inDur + 0.05)); });
+      sel.dataset.k = String(k);
+      if (k > 0) {
+        const tIn = document.createElement('input');
+        const own = sOv.cutTime && sOv.cutTime[k] != null;
+        tIn.type = 'number'; tIn.step = '0.01'; tIn.min = '0'; tIn.className = 'cut-time pro-only mono' + (own ? ' is-forced' : '');
+        tIn.value = c.start.toFixed(2); tIn.title = own ? 'このカットの開始時刻（手動）' : 'このカットの開始時刻（自動）';
+        tIn.setAttribute('aria-label', `${name} カット${k + 1}の開始時刻`);
+        tIn.addEventListener('change', e => {
+          const v = parseFloat(e.target.value);
+          pushEdit();
+          const ct = Object.assign({}, (S.project.overrides[line] || {}).cutTime || {});
+          if (isFinite(v) && e.target.value !== '') ct[k] = +Math.max(0, v - (+sp.start || 0)).toFixed(3); else delete ct[k];
+          setOv(line, { cutTime: Object.keys(ct).length ? ct : undefined }); replan(); seek(Math.max(0, isFinite(v) ? v : c.start) + 0.001);
+        });
+        const del = document.createElement('button');
+        del.type = 'button'; del.className = 'icon-txt ghost cut-del';
+        del.textContent = '×'; del.title = 'このカットを削除';
+        del.setAttribute('aria-label', `${name} カット${k + 1}を削除`);
+        del.addEventListener('click', ev => { ev.stopPropagation(); removeCutAt(line, k); });
+        const pair = document.createElement('div'); pair.className = 'cut-pair';
+        pair.append(tIn, sel, del); cutsEl.appendChild(pair);
+      } else cutsEl.appendChild(sel);
+    });
+    if (opts.readFirst) q('.st-read').addEventListener('click', () => {
+      const t = S.plan.lines.length ? S.plan.lines[0].start : 0;
+      setSpecial(key, { end: +t.toFixed(3), start: 0 });
+      toast(`${name}: ${t.toFixed(2)} 秒を読み込みました`);
+      seek(0.001);
+    });
+    ol.appendChild(li); return li;
+  };
+  addSpecialRow('intro', 'OP', 'オープニング（片头）', { readFirst: true, note: '時間 0 = 無効・最初の歌詞の前' });
   S.plan.lines.forEach((ln, i) => {
     const o = ov[i] || {};
     const li = document.createElement('li'); li.className = 'ln' + (ln.interlude ? ' is-inter' : '') + (R && i >= R.from && i <= R.to ? ' in-range' : '');
@@ -673,6 +759,7 @@ function renderLines() {
       <span class="txt" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
       <div class="meta"><span class="cuts"></span>
       <span class="tools">
+        ${ln.interlude ? '' : '<button class="icon-txt ghost cut-add" title="この行にカット（時間ブロック）を増やす" aria-label="${i + 1}行目にカットを増やす">＋</button>'}
         <button class="icon ghost edit" title="この行の歌詞を直す" aria-label="${i + 1}行目の歌詞を直す">${ICON.pen}</button>
         ${ln.interlude ? '' : `<select class="ncut" aria-label="${i + 1}行目のカット数">${cutOpts}</select>`}
         ${ln.interlude ? '' : `<select class="lay pro-only" aria-label="レイアウト指定"></select>`}
@@ -704,6 +791,7 @@ function renderLines() {
     q('.txt').addEventListener('click', () => seek(ln.start + 0.001));
     q('.txt').addEventListener('dblclick', () => editLine(li, ln));
     q('.edit').addEventListener('click', () => editLine(li, ln));
+    if (q('.cut-add')) q('.cut-add').addEventListener('click', () => addCut(i));
     if (q('.lay')) q('.lay').addEventListener('change', e => { remember(); setOv(i, { layout: e.target.value || undefined }); replan(); commit(); });
     if (q('.ncut')) q('.ncut').addEventListener('change', e => { remember(); setOv(i, { cuts: +e.target.value || undefined, single: undefined }); replan(); commit(); seek(ln.start + 0.001); });
     q('.tapfrom').addEventListener('click', () => startTap(i));
@@ -736,8 +824,13 @@ function renderLines() {
           if (isFinite(v) && e.target.value !== '') ct[k] = +Math.max(0, v - ln.start).toFixed(3); else delete ct[k];
           setOv(i, { cutTime: Object.keys(ct).length ? ct : undefined }); replan(); seek(Math.max(0, (isFinite(v) ? v : c.start)) + 0.001);
         });
+        const del = document.createElement('button');
+        del.type = 'button'; del.className = 'icon-txt ghost cut-del';
+        del.textContent = '×'; del.title = 'このカットを削除（行頭のカットは残ります）';
+        del.setAttribute('aria-label', `${i + 1}行目 カット${k + 1}を削除`);
+        del.addEventListener('click', ev => { ev.stopPropagation(); removeCutAt(i, k); });
         const pair = document.createElement('div'); pair.className = 'cut-pair';
-        pair.append(tIn, sel); cutsEl.appendChild(pair);
+        pair.append(tIn, sel, del); cutsEl.appendChild(pair);
       } else cutsEl.appendChild(sel);
     });
     // スマホ: a row is one line of text; tapping it opens its tools (and jumps there)
@@ -750,6 +843,8 @@ function renderLines() {
     });
     ol.appendChild(li); S.lineEls.push(li);
   });
+  addSpecialRow('tail', '尾', '尾音（余韻・静止）', { note: '時間 0 = 無効・入場アニメ後に静止' });
+  addSpecialRow('outro', 'ED', 'エンディング（片尾）', { note: '時間 0 = 無効・歌詞の後' });
   $('linesInfo').textContent = `${S.plan.lines.length}行 / ${S.plan.cuts.length}カット`;
   syncRangeUI();
 }
@@ -1436,9 +1531,47 @@ function setOv(i, patch) {
   for (const k of Object.keys(cur)) if (cur[k] === undefined || cur[k] === false || cur[k] === '') delete cur[k];
   if (Object.keys(cur).length) S.project.overrides[i] = cur; else delete S.project.overrides[i];
 }
+// 行のカット数を +1 / -1 する (行頭のカットは残す)。消したカット以降の細かい指定は詰める。
+function lineCutCount(i) { return S.plan.cuts.filter(c => c.line === i && (i < 0 || (J.LAYOUTS[c.layout] && !J.LAYOUTS[c.layout].special))).length; }
+function specialStart(i) { const c = S.plan.cuts.find(x => x.line === i); return c ? c.start : 0; }
+function addCut(i) {
+  pushEdit();
+  const n = lineCutCount(i);
+  if (n >= 12) { toast('カットは最大 12 までです'); return; }
+  setOv(i, { cuts: n + 1, single: undefined });
+  replan(); seek(Math.max(0, i < 0 ? specialStart(i) : (S.plan.lines[i] ? S.plan.lines[i].start : 0)) + 0.001);
+}
+function removeCutAt(i, k) {
+  if (k <= 0) return;                                   // 行頭のカットは消せない
+  const n = lineCutCount(i);
+  if (n <= 1) { toast('この行のカットはこれ以上減らせません'); return; }
+  pushEdit();
+  const o = Object.assign({}, S.project.overrides[i] || {});
+  const shift = (obj) => {
+    if (!obj || typeof obj !== 'object') return undefined;
+    const out = {};
+    for (const key of Object.keys(obj)) {
+      const kk = +key;
+      if (!isFinite(kk)) { out[key] = obj[key]; continue; }
+      if (kk === k) continue;
+      out[kk > k ? kk - 1 : kk] = obj[key];
+    }
+    return Object.keys(out).length ? out : undefined;
+  };
+  const cutTime = shift(o.cutTime), cutLayouts = shift(o.cutLayouts), cutTech = shift(o.cutTech), cutText = shift(o.cutText), cutQuiet = shift(o.cutQuiet);
+  setOv(i, { cuts: n - 1, cutTime, cutLayouts, cutTech, cutText, cutQuiet });
+  replan(); seek(Math.max(0, i < 0 ? specialStart(i) : (S.plan.lines[i] ? S.plan.lines[i].start : 0)) + 0.001);
+}
+function setSpecial(key, patch) {
+  pushEdit();
+  const sp = Object.assign({}, S.project.specials || {});
+  sp[key] = Object.assign({}, sp[key] || {}, patch);
+  S.project.specials = sp;
+  replan();
+}
 function setCutLayout(i, k, layout) { setCutTech(i, k, 'layout', layout); }
 function setCutTech(i, k, group, key) {
-  if (i == null || i < 0 || k == null || k < 0) return;
+  if (i == null || k == null || k < 0) return;          // i < 0: 特殊モジュール行も指定可能
   const cur = Object.assign({}, S.project.overrides[i] || {});
   const cutTech = Object.assign({}, cur.cutTech || {});
   const slot = Object.assign({}, cutTech[k] || cutTech[String(k)] || {});
@@ -1472,7 +1605,7 @@ function cutTextSlot(line, k) {
   return t && typeof t === 'object' ? t : {};
 }
 function setCutText(line, k, field, value) {
-  if (line == null || line < 0 || k == null || k < 0) return;
+  if (line == null || k == null || k < 0) return;       // line < 0: 特殊モジュール行も指定可能
   const cur = Object.assign({}, S.project.overrides[line] || {});
   const cutText = Object.assign({}, cur.cutText || {});
   const slot = Object.assign({}, cutText[k] || cutText[String(k)] || {});
